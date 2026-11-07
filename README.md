@@ -1,6 +1,4 @@
-import pypandoc
-
-readme = r'''# Screw Contact Generator (ANSYS Mechanical ACT)
+# Screw Contact Generator (ANSYS Mechanical ACT)
 
 **Version:** 1.3  
 **Target environment:** ANSYS Mechanical 2019 R2  
