@@ -4,7 +4,7 @@ An IronPython script that automatically creates the bonded MPC contacts between 
 
 **Version:** 1.4 | **Software:** Ansys Mechanical 2019 R2 (ACT Console, IronPython 2.7)
 
-\---
+
 
 ## Why this script exists
 
