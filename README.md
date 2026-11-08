@@ -46,7 +46,7 @@ A model with hundreds of bolted joints needs at least four node-to-edge contacts
 |Pinball Region|Radius|
 |Pinball Radius|Edge radius + 0.3 mm|
 
-> \\*\\*Ansys 2019 R2 bug:\\*\\* if the edge is selected before the node, the pinball center ends up on the edge and Contact Tool reports an open contact. The script always scopes the \\*\\*node first and the edge(s) second\\*\\*, and it can read the scope back after creation to confirm this (`VERIFY\\_SCOPE\\_AFTER\\_CREATE`). Please still check a few contacts with Contact Tool.
+> \\\*\\\*Ansys 2019 R2 bug:\\\*\\\* if the edge is selected before the node, the pinball center ends up on the edge and Contact Tool reports an open contact. The script always scopes the \\\*\\\*node first and the edge(s) second\\\*\\\*, and it can read the scope back after creation to confirm this (`VERIFY\\\_SCOPE\\\_AFTER\\\_CREATE`). Please still check a few contacts with Contact Tool.
 
 ## Naming
 
