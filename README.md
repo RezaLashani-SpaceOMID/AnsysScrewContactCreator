@@ -78,7 +78,7 @@ Recommended order:
 
 1. Run with `DRY_RUN = True` and read the report.
 2. Fix settings if needed, repeat the dry run.
-3. Set `DRY_RUN = False` and run for real. Optionally test on a few screws first with `PILOT_SCREWS = [1, 3]`.
+3. Set `DRY_RUN = False` and run for real. Optionally test on a few screws first with `_SCREWS = [1, 3]`.
 4. Create the nodes listed under "Nodes WITHOUT edge" by hand.
 5. Check a few contacts with Contact Tool.
 
@@ -91,7 +91,7 @@ All settings are at the top of the script.
 |Setting|Default|Meaning|
 |-|-|-|
 |`DRY_RUN`|`True`|`True`: plan and report only, change nothing. `False`: rename and create.|
-|`PILOT\_SCREWS`|`None`|List of screw numbers to process, e.g. `[1, 3]`. `None` = all screws.|
+|`PILOT_SCREWS`|`None`|List of screw numbers to process, e.g. `[1, 3]`. `None` = all screws.|
 |`PINBALL_ADD_MM`|`0.3`|Added to the edge radius for the pinball radius.|
 |`END_TOL_MM`|`3.0`|Maximum distance between a top or bottom node and the edge center.|
 |`MID_TOL_MM`|`2.0`|Same for middle nodes. Keep it below half the screw spacing.|
