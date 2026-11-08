@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # =====================================================================
-#  Screw Contact Generator  v1.3
+#  Screw Contact Generator  v1.4
 #  Ansys Mechanical 2019 R2 (ACT Console, IronPython 2.7)
 #
 #  Creates bonded MPC contacts between beam-screw nodes (line bodies)
@@ -9,14 +9,14 @@
 #  Re-runs only add missing contacts; the existing group, folders and
 #  contacts are kept.
 #
-#  Contact : beam node (vertex)  ->  Target: circular edge (all segments)
+#  Contact : beam node (vertex) is scoped FIRST, then the target edge(s)
 #  Pinball : edge radius + 0.3 mm
 #  Naming  : Screw-0001 (geometry tree order), "Screw-0001 - TopEdge-6016"
 #
 #  Usage   : run with DRY_RUN = True first, check the console report.
-#  Details : see README.
+#  Details : see README.md
 # =====================================================================
-SCRIPT_VERSION = "1.3"
+SCRIPT_VERSION = "1.4"
 import math
 import re
 import time
@@ -53,6 +53,10 @@ DELETE_CONFLICTING_CONTACTS = False  # True: delete contacts that use a node of 
                                      # an edge the script does not select (review the list first!)
 LIST_NEW_CONTACTS = True       # print the names of newly created contacts
 LIST_NEW_MAX      = 100        # max number of names printed
+
+# ---- scope assignment (Ansys 2019 R2 bug: the node must be selected first) ----
+VERIFY_SCOPE_AFTER_CREATE = True   # True: read back Source (node) and Target (edge) of every new
+                                   #       contact and report any mismatch
 
 # ---- top node / top edge ----
 TOP_END          = "auto"  # "auto" = detect by definition, or "first" / "last" (axis order)
@@ -99,7 +103,7 @@ PREFILTER_MARGIN_MM = 0.5    # extra margin for the prefilter
 ARC_METHOD          = "closed_form"   # "closed_form" (fast, no Points call) or "points"
 ARC_CROSSCHECK_N    = 3      # closed form is compared with the Points method for this many arcs;
                              # on a mismatch the script switches to "points" automatically
-FAST_PROPERTY_ORDER = True   # True: scope is assigned last (fewer updates). False: old order
+FAST_PROPERTY_ORDER = True   # True: scope is assigned last (fewer updates). False: scope first
 USE_TRANSACTION     = True   # True: use Mechanical's Transaction (if it exists in this version)
 TX_BATCH_SCREWS     = 20     # screws per transaction batch
 SHOW_TIMING         = True   # print elapsed time and estimate in the progress lines
@@ -1055,6 +1059,23 @@ def sel_ids(sel):
     except:
         return None
 
+def assign_scopes(c, node_vids, edge_ids):
+    """Ansys 2019 R2: the NODE (contact side) must be selected FIRST, then the edge(s)
+    (target side). Otherwise the pinball center ends up on the edge and the contact is open."""
+    c.SourceLocation = scope(node_vids)     # 1) node (vertex of the beam)
+    c.TargetLocation = scope(edge_ids)      # 2) edge(s) - all arcs of a split hole edge
+
+def check_scopes(c, node_vids, edge_ids):
+    """True/False = Source is the node and Target is the edge(s); None = could not be read."""
+    try:
+        src = sel_ids(c.SourceLocation)
+        tgt = sel_ids(c.TargetLocation)
+    except:
+        return None
+    if src is None or tgt is None:
+        return None
+    return src == set([int(v) for v in node_vids]) and tgt == set([int(i) for i in edge_ids])
+
 # ---------- planned contacts ----------
 todo = [m for m in matches if (not PILOT_SCREWS) or ((m[0] + 1) in PILOT_SCREWS)]
 # screw by screw, then role order, then edge id (stable for two edges at one node)
@@ -1192,6 +1213,8 @@ created = 0
 deleted = 0
 failed = []          # (name, reason)
 prop_warnings = {}   # message -> count
+scope_bad = []       # names of contacts whose read-back scope differs from the plan
+scope_unread = 0     # contacts whose scope could not be read back
 new_names = []
 t_start = time.time()
 t_create = t_start
@@ -1238,8 +1261,7 @@ if not DRY_RUN:
                         c = group.AddContactRegion()
                         c.Name = cname
                         if not FAST_PROPERTY_ORDER:
-                            c.SourceLocation = scope(n["vids"])   # CONTACT = beam node (vertex)
-                            c.TargetLocation = scope(e["ids"])    # TARGET  = circular edge (all arcs)
+                            assign_scopes(c, n["vids"], e["ids"])   # node first, then edge(s)
                         set_if_diff(c, "ContactType", ContactType.Bonded)
                         set_if_diff(c, "ContactFormulation", ContactFormulation.MPC)
                         set_if_diff(c, "PinballRegion", ContactPinballType.Radius)
@@ -1252,10 +1274,15 @@ if not DRY_RUN:
                             else:
                                 set_if_diff(c, prop, val)
                         if FAST_PROPERTY_ORDER:
-                            c.SourceLocation = scope(n["vids"])   # CONTACT = beam node (vertex)
-                            c.TargetLocation = scope(e["ids"])    # TARGET  = circular edge (all arcs)
+                            assign_scopes(c, n["vids"], e["ids"])   # node first, then edge(s)
                         created += 1
                         new_names.append(cname)
+                        if VERIFY_SCOPE_AFTER_CREATE:
+                            ok = check_scopes(c, n["vids"], e["ids"])
+                            if ok is False:
+                                scope_bad.append(cname)
+                            elif ok is None:
+                                scope_unread += 1
                     except Exception as ex:
                         failed.append((cname, str(ex)))
                         try:                      # remove the half-made contact
@@ -1285,6 +1312,13 @@ else:
         print("   FAILED %s -> %s" % (f[0], f[1]))
     for msg, cnt in prop_warnings.items():
         print("   PROPERTY NOT SET (%d contacts): %s" % (cnt, msg))
+    if VERIFY_SCOPE_AFTER_CREATE and created > 0:
+        print("Scope check      : %d of %d new contacts verified (Source = node, Target = edge(s))"
+              % (created - len(scope_bad) - scope_unread, created))
+        for nm in scope_bad[:LIST_NEW_MAX]:
+            print("   SCOPE MISMATCH %s -> check this contact (pinball center / open contact)" % nm)
+        if scope_unread:
+            print("   scope could not be read back for %d contacts" % scope_unread)
     if deleted:
         print("Conflicting contacts deleted: %d" % deleted)
     if SHOW_TIMING and created > 0:
