@@ -46,7 +46,7 @@ A model with hundreds of bolted joints needs at least four node-to-edge contacts
 |Pinball Region|Radius|
 |Pinball Radius|Edge radius + 0.3 mm|
 
-> \\\*\\\*Ansys 2019 R2 bug:\\\*\\\* if the edge is selected before the node, the pinball center ends up on the edge and Contact Tool reports an open contact. The script always scopes the \\\*\\\*node first and the edge(s) second\\\*\\\*, and it can read the scope back after creation to confirm this (`VERIFY\\\_SCOPE\\\_AFTER\\\_CREATE`). Please still check a few contacts with Contact Tool.
+> **Ansys 2019 R2 bug:** if the edge is selected before the node, the pinball center ends up on the edge and Contact Tool reports an open contact. The script always scopes the **node first and the edge(s) second**, and it can read the scope back after creation to confirm this (`VERIFY_SCOPE_AFTER_CREATE`). Please still check a few contacts with Contact Tool.
 
 ## Naming
 
@@ -70,15 +70,15 @@ Screws are numbered in geometry-tree order, top to bottom. The numbers change if
 1. **Back up** the project.
 2. In Mechanical, turn on the **ACT** button in the toolbar to open the ACT Console.
 3. Create a **new snippet**.
-4. **Paste** the complete content of `screw\\\_contacts.py` into the snippet.
+4. **Paste** the complete content of `screw_contacts.py` into the snippet.
 5. **Click the snippet.** This pastes the code into the command line.
 6. Press **Enter** to run it.
 
 Recommended order:
 
-1. Run with `DRY\\\_RUN = True` and read the report.
+1. Run with `DRY_RUN = True` and read the report.
 2. Fix settings if needed, repeat the dry run.
-3. Set `DRY\\\_RUN = False` and run for real. Optionally test on a few screws first with `PILOT\\\_SCREWS = \\\[1, 3]`.
+3. Set `DRY_RUN = False` and run for real. Optionally test on a few screws first with `PILOT_SCREWS = [1, 3]`.
 4. Create the nodes listed under "Nodes WITHOUT edge" by hand.
 5. Check a few contacts with Contact Tool.
 
@@ -90,73 +90,73 @@ All settings are at the top of the script.
 
 |Setting|Default|Meaning|
 |-|-|-|
-|`DRY\\\_RUN`|`True`|`True`: plan and report only, change nothing. `False`: rename and create.|
-|`PILOT\\\_SCREWS`|`None`|List of screw numbers to process, e.g. `\\\[1, 3]`. `None` = all screws.|
-|`PINBALL\\\_ADD\\\_MM`|`0.3`|Added to the edge radius for the pinball radius.|
-|`END\\\_TOL\\\_MM`|`3.0`|Maximum distance between a top or bottom node and the edge center.|
-|`MID\\\_TOL\\\_MM`|`2.0`|Same for middle nodes. Keep it below half the screw spacing.|
-|`MAX\\\_EDGES\\\_MID`|`2`|Edges per middle node (one per body).|
-|`MID\\\_LIMIT\\\_OVERRIDE`|`{}`|Per node limit, e.g. `{(1, "MID2"): 1}`.|
-|`MIN\\\_RADIUS\\\_MM`|`0.5`|Ignore circles smaller than this.|
-|`LENGTH\\\_FACTOR\\\_TO\\\_MM`|`None`|Automatic from the model unit. Set `1000.0` if the printed radius is wrong.|
+|`DRY_RUN`|`True`|`True`: plan and report only, change nothing. `False`: rename and create.|
+|`PILOT\_SCREWS`|`None`|List of screw numbers to process, e.g. `[1, 3]`. `None` = all screws.|
+|`PINBALL_ADD_MM`|`0.3`|Added to the edge radius for the pinball radius.|
+|`END_TOL_MM`|`3.0`|Maximum distance between a top or bottom node and the edge center.|
+|`MID_TOL_MM`|`2.0`|Same for middle nodes. Keep it below half the screw spacing.|
+|`MAX_EDGES_MID`|`2`|Edges per middle node (one per body).|
+|`MID_LIMIT_OVERRIDE`|`{}`|Per node limit, e.g. `{(1, "MID2"): 1}`.|
+|`MIN_RADIUS_MM`|`0.5`|Ignore circles smaller than this.|
+|`LENGTH_FACTOR_TO_MM`|`None`|Automatic from the model unit. Set `1000.0` if the printed radius is wrong.|
 
 ### Existing contacts and re-runs
 
 |Setting|Default|Meaning|
 |-|-|-|
-|`GROUP\\\_NAME`|`"screwContacts"`|Name of the connection group. The name matching ignores case, spaces, `\\\_` and `-`.|
-|`REBUILD\\\_FROM\\\_SCRATCH`|`False`|`True` deletes the whole group, including folders and contacts.|
-|`CHECK\\\_EXISTING\\\_BY\\\_SCOPE`|`True`|Recognise existing contacts by name or by scope. `False` = by name only.|
-|`FAST\\\_EXISTING\\\_SCAN`|`True`|Skip scope reading for contacts whose name matches a planned name.|
-|`DELETE\\\_CONFLICTING\\\_CONTACTS`|`False`|Delete contacts that use a node of the script with a different edge. Review the list first.|
-|`VERIFY\\\_SCOPE\\\_AFTER\\\_CREATE`|`True`|Read back Source (node) and Target (edge) of each new contact and report mismatches.|
+|`GROUP_NAME`|`"screwContacts"`|Name of the connection group. The name matching ignores case, spaces, `_` and `-`.|
+|`REBUILD_FROM_SCRATCH`|`False`|`True` deletes the whole group, including folders and contacts.|
+|`CHECK_EXISTING_BY_SCOPE`|`True`|Recognise existing contacts by name or by scope. `False` = by name only.|
+|`FAST_EXISTING_SCAN`|`True`|Skip scope reading for contacts whose name matches a planned name.|
+|`DELETE_CONFLICTING_CONTACTS`|`False`|Delete contacts that use a node of the script with a different edge. Review the list first.|
+|`VERIFY_SCOPE_AFTER_CREATE`|`True`|Read back Source (node) and Target (edge) of each new contact and report mismatches.|
 
 ### Top node and top edge
 
 |Setting|Default|Meaning|
 |-|-|-|
-|`TOP\\\_END`|`"auto"`|`"auto"`, `"first"` or `"last"` along the screw axis.|
-|`TOP\\\_END\\\_OVERRIDE`|`{}`|Per screw, e.g. `{7: "last"}`.|
-|`TOP\\\_COLLISION\\\_RULE`|`"larger\\\_edge"`|If both ends qualify: `"larger\\\_edge"`, `"first"` or `"last"`.|
-|`TOP\\\_RULE`|`"closest\\\_above\\\_hole"`|Smallest edge larger than the hole, or `"largest"`.|
-|`TOP\\\_RADIUS\\\_OVERRIDE`|`{}`|Per screw, e.g. `{7: 3.5}`.|
-|`TOP\\\_EDGE\\\_OVERRIDE`|`{}`|Per screw, e.g. `{7: 5678}`. Any segment id of the edge works.|
-|`TOP\\\_MAX\\\_RADIUS\\\_MM`|`60.0`|Ignore larger circles at the top node.|
-|`CONCENTRIC\\\_TOL\\\_MM`|`0.05`|Edges with centers closer than this are concentric.|
-|`RADIUS\\\_STEP\\\_MIN\\\_MM`|`0.05`|The extra edge must be at least this much larger than the hole edge.|
+|`TOP_END`|`"auto"`|`"auto"`, `"first"` or `"last"` along the screw axis.|
+|`TOP_END_OVERRIDE`|`{}`|Per screw, e.g. `{7: "last"}`.|
+|`TOP_COLLISION_RULE`|`"larger_edge"`|If both ends qualify: `"larger_edge"`, `"first"` or `"last"`.|
+|`TOP_RULE`|`"closest_above_hole"`|Smallest edge larger than the hole, or `"largest"`.|
+|`TOP_RADIUS_OVERRIDE`|`{}`|Per screw, e.g. `{7: 3.5}`.|
+|`TOP_EDGE_OVERRIDE`|`{}`|Per screw, e.g. `{7: 5678}`. Any segment id of the edge works.|
+|`TOP_MAX_RADIUS_MM`|`60.0`|Ignore larger circles at the top node.|
+|`CONCENTRIC_TOL_MM`|`0.05`|Edges with centers closer than this are concentric.|
+|`RADIUS_STEP_MIN_MM`|`0.05`|The extra edge must be at least this much larger than the hole edge.|
 
 ### Edges made of several arcs
 
 |Setting|Default|Meaning|
 |-|-|-|
-|`INCLUDE\\\_SEGMENTED\\\_HOLES`|`True`|Combine arcs on the same circle into one hole edge.|
-|`CIRCLE\\\_MATCH\\\_TOL\\\_MM`|`0.05`|Arcs belong together if center and radius agree within this and the planes are parallel.|
-|`MIN\\\_ARCS\\\_IN\\\_CIRCLE`|`2`|A circle needs at least this many arcs. A single arc (for example a slot end) is not used.|
-|`MIN\\\_CIRCLE\\\_COVERAGE`|`0.0`|Minimum fraction of the full circle covered by the arcs (0 = off).|
-|`ARC\\\_METHOD`|`"closed\\\_form"`|`"closed\\\_form"` or `"points"`. See the notes below.|
-|`ARC\\\_CROSSCHECK\\\_N`|`3`|Number of arcs cross-checked between both methods.|
+|`INCLUDE_SEGMENTED_HOLES`|`True`|Combine arcs on the same circle into one hole edge.|
+|`CIRCLE_MATCH_TOL_MM`|`0.05`|Arcs belong together if center and radius agree within this and the planes are parallel.|
+|`MIN_ARCS_IN_CIRCLE`|`2`|A circle needs at least this many arcs. A single arc (for example a slot end) is not used.|
+|`MIN_CIRCLE_COVERAGE`|`0.0`|Minimum fraction of the full circle covered by the arcs (0 = off).|
+|`ARC_METHOD`|`"closed_form"`|`"closed_form"` or `"points"`. See the notes below.|
+|`ARC_CROSSCHECK_N`|`3`|Number of arcs cross-checked between both methods.|
 
 ### Naming
 
 |Setting|Default|Meaning|
 |-|-|-|
-|`SCREW\\\_ORDER`|`"tree"`|`"tree"` = geometry-tree order, `"position"` = by coordinates.|
-|`RENAME\\\_SCREWS\\\_IN\\\_TREE`|`True`|Rename the screw line bodies in the tree.|
-|`SCREW\\\_PREFIX`|`"Screw-"`|Prefix of the screw name.|
-|`SCREW\\\_SEGMENT\\\_SUFFIX`|`False`|Add `-Seg1`, `-Seg2`, ... if a screw has several bodies.|
-|`NAME\\\_SEPARATOR`|`" - "`|Separator inside contact names.|
-|`INCLUDE\\\_TREE\\\_NAME\\\_IN\\\_CONTACT`|`False`|Old style tag from the original tree name. Switched off automatically when renaming is on.|
-|`EXTRACT\\\_FROM\\\_PARENTHESES`|`False`|Only used with the tag: keep only the text inside `( )`.|
+|`SCREW_ORDER`|`"tree"`|`"tree"` = geometry-tree order, `"position"` = by coordinates.|
+|`RENAME_SCREWS_IN_TREE`|`True`|Rename the screw line bodies in the tree.|
+|`SCREW_PREFIX`|`"Screw-"`|Prefix of the screw name.|
+|`SCREW_SEGMENT_SUFFIX`|`False`|Add `-Seg1`, `-Seg2`, ... if a screw has several bodies.|
+|`NAME_SEPARATOR`|`" - "`|Separator inside contact names.|
+|`INCLUDE_TREE_NAME_IN_CONTACT`|`False`|Old style tag from the original tree name. Switched off automatically when renaming is on.|
+|`EXTRACT_FROM_PARENTHESES`|`False`|Only used with the tag: keep only the text inside `( )`.|
 
 ### Speed
 
 |Setting|Default|Meaning|
 |-|-|-|
-|`PREFILTER\\\_EDGES`|`True`|Drop edges that are far from every screw node early.|
-|`FAST\\\_PROPERTY\\\_ORDER`|`True`|Properties first, scope last (fewer tree updates). `False`: scope first. Both select the node first.|
-|`USE\\\_TRANSACTION`|`True`|Use Mechanical's `Transaction` if it exists in this version.|
-|`TX\\\_BATCH\\\_SCREWS`|`20`|Screws per transaction batch.|
-|`SHOW\\\_PHASE\\\_TIMES`|`True`|Print the time of every phase in the summary.|
+|`PREFILTER_EDGES`|`True`|Drop edges that are far from every screw node early.|
+|`FAST_PROPERTY_ORDER`|`True`|Properties first, scope last (fewer tree updates). `False`: scope first. Both select the node first.|
+|`USE_TRANSACTION`|`True`|Use Mechanical's `Transaction` if it exists in this version.|
+|`TX_BATCH_SCREWS`|`20`|Screws per transaction batch.|
+|`SHOW_PHASE_TIMES`|`True`|Print the time of every phase in the summary.|
 
 ## How it works
 
@@ -173,11 +173,11 @@ All settings are at the top of the script.
 |-|-|
 |Header|Mode (dry run or create), unit, counts of bodies and edges|
 |Hole edges made of several arcs|Arc ids, covered fraction of the circle, radius, center|
-|`\\\[rejected]`|Arc groups that were not used and why|
+|`[rejected]`|Arc groups that were not used and why|
 |Top node checks|Candidates for the top edge and warnings if both ends qualify|
 |Screw numbering|New name next to the original tree name|
 |Contacts per screw|Number of contacts per role|
-|Existing contacts|How many were found and recognised, `\\\[?]` for contacts that conflict with the plan|
+|Existing contacts|How many were found and recognised, `[?]` for contacts that conflict with the plan|
 |Summary|Created and failed contacts, scope check, timing|
 |`Nodes WITHOUT edge`|Nodes you must connect manually, with a reason|
 
@@ -187,18 +187,18 @@ All settings are at the top of the script.
 * Folders inside the contact group cannot be created through the 2019 R2 API. New contacts are added at the end of the group; move them into your manual folders if needed.
 * Screw numbers follow the geometry tree order. If the order changes, numbers and names change on the next run.
 * Renaming, tree order, `Transaction` and some property names depend on the API of the installed version. Failures are printed and do not stop the run.
-* The script was developed and tested on a sample model with 20 screws. Test on a few screws (`PILOT\\\_SCREWS`) before running on a new model type.
+* The script was developed and tested on a sample model with 20 screws. Test on a few screws (`PILOT_SCREWS`) before running on a new model type.
 
 ## Troubleshooting
 
 |Problem|Likely cause and fix|
 |-|-|
-|Nothing is renamed or created|`DRY\\\_RUN` is `True`. Set it to `False`.|
-|A second contact group appears|`GROUP\\\_NAME` does not match the name of your existing group. The report lists the objects under Connections.|
+|Nothing is renamed or created|`DRY_RUN` is `True`. Set it to `False`.|
+|A second contact group appears|`GROUP_NAME` does not match the name of your existing group. The report lists the objects under Connections.|
 |`Creation skipped` message|The existing group could not be read safely. Nothing is created to avoid duplicates.|
-|Radius is 1000 times off|Set `LENGTH\\\_FACTOR\\\_TO\\\_MM`.|
+|Radius is 1000 times off|Set `LENGTH_FACTOR_TO_MM`.|
 |Node listed under `NO EDGE`|The edge is not circular, is a single arc, or lies outside the tolerance. Create the contact by hand or increase the tolerance.|
-|Wrong top edge|Use `TOP\\\_END\\\_OVERRIDE`, `TOP\\\_RADIUS\\\_OVERRIDE` or `TOP\\\_EDGE\\\_OVERRIDE` for that screw.|
+|Wrong top edge|Use `TOP_END_OVERRIDE`, `TOP_RADIUS_OVERRIDE` or `TOP_EDGE_OVERRIDE` for that screw.|
 |Open contact in Contact Tool|Check `Scope check` in the summary. The node must be the contact side and must be selected first.|
 |Message about switching to the Points method|The closed form for arcs did not match the Points method. The script uses Points automatically.|
 
@@ -206,7 +206,7 @@ All settings are at the top of the script.
 
 |File|Purpose|
 |-|-|
-|`screw\\\_contacts.py`|The script|
+|`screw_contacts.py`|The script|
 |`README.md`|This file|
 
 ## Version history
