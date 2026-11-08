@@ -1,351 +1,165 @@
-# Screw Contact Generator (ANSYS Mechanical ACT)
-
-**Version:** 1.3  
-**Target environment:** ANSYS Mechanical 2019 R2  
-**Scripting engine:** ACT Console / IronPython 2.7
-
-Automatically creates **Bonded MPC contact regions** between nodes of beam-type screw line bodies and circular hole edges in surrounding solid bodies. It supports both full circular edges and circular holes represented by multiple arc segments.
-
-Version 1.3 also adds faster geometry processing, optimized existing-contact scans, execution timing, and safer default settings.
-
+Screw Contact Generator for Ansys Mechanical 2019 R2
+An IronPython script that automatically creates the bonded MPC contacts between the nodes of 1D beam screws (line bodies) and the circular hole edges of the surrounding solid bodies. It also renames the screws in the geometry tree and gives every contact a consistent, traceable name.
+Version: 1.4 | Software: Ansys Mechanical 2019 R2 (ACT Console, IronPython 2.7)
 ---
-
-## Overview
-
-The script identifies screw line bodies from the Mechanical geometry, groups connected line bodies into individual screws, identifies the screw nodes, and searches for suitable circular edges on nearby solid bodies.
-
-For each detected match, it creates a contact region with:
-
-- **Contact type:** Bonded
-- **Contact formulation:** MPC
-- **Contact/source scope:** screw node vertex (or coincident vertices representing that node)
-- **Target scope:** circular hole edge; for a segmented hole, all arc segments in the detected circle
-- **Pinball region:** Radius
-- **Pinball radius:** detected edge radius + `PINBALL_ADD_MM` (default: 0.3 mm)
-
-The script creates or reuses a connection group named `screwContacts` by default.
-
-> **Important:** Always start with `DRY_RUN = True`. Review the console report and verify the detected screw numbering, edge matches, and unmatched nodes before allowing model changes.
-
----
-
-## Main features
-
-- Automatically detects beam-screw line bodies and groups connected segments into screws using shared node positions.
-- Numbers screws in geometry-tree order by default.
-- Identifies top, middle, and bottom screw nodes.
-- Detects full circular edges and reconstructs circles from segmented arc edges.
-- Groups arcs by fitted circle center, radius, and plane orientation.
-- Uses a fast closed-form arc geometry calculation by default, with an initial cross-check against the points-based method and automatic fallback when a mismatch is detected.
-- Selects the smallest concentric circular edge per nearby solid body as the hole edge for middle and bottom nodes.
-- Detects larger concentric edges at the top end for top-edge matching.
-- Supports per-screw overrides for top-end selection and top-edge selection.
-- Supports pilot runs on selected screw numbers.
-- Preserves existing contacts on reruns and creates only missing contacts.
-- Can recognize existing contacts by planned name and/or geometry scope.
-- Can optionally identify and delete conflicting contacts, but this is disabled by default.
-- Can optionally rename screw line bodies in the geometry tree.
-- Uses spatial prefiltering to reduce the number of circular edges processed.
-- Uses Mechanical transactions in batches when the API provides transaction support.
-- Reports matching results, rejected or unused arc groups, unmatched nodes, contact creation failures, and timing by phase.
-
----
-
-## Requirements and compatibility
-
-- ANSYS Mechanical **2019 R2**.
-- IronPython **2.7** environment provided by Mechanical.
-- A Mechanical model containing:
-  - screw representations as wire/line bodies with vertices at the relevant contact locations;
-  - surrounding solid bodies containing circular hole edges.
-- The script must be run from within Mechanical, where `ExtAPI`, `GeoData`, `Quantity`, and the Mechanical API objects are available.
-
-The script is written for the Mechanical 2019 R2 API. Compatibility with other ANSYS releases has not been established by this repository description and should be tested before use.
-
----
-
-## Installation and execution
-
-1. Open the project in ANSYS Mechanical.
-2. Make sure the screw geometry is represented by line/wire bodies and that the hole boundaries are circular edges on the surrounding solid bodies.
-3. Open the ACT Console or create a Mechanical Python Code/Script snippet suitable for your workflow.
-4. Open `screwContactCreatorScript - v1.3.py`.
-5. Review the **USER SETTINGS** section at the top of the script.
-6. Keep `DRY_RUN = True` for the first run.
-7. Execute the script in Mechanical.
-8. Review the console output:
-   - number of wire and solid bodies found;
-   - detected screws and their numbering;
-   - full and segmented circular edges detected;
-   - proposed top, middle, and bottom matches;
-   - existing contacts and planned new contacts;
-   - unmatched nodes and any warnings.
-9. If the results are correct, set `DRY_RUN = False` and run the script again.
-10. Inspect the generated connection group and contact scopes in Mechanical before solving.
-
-The script does not provide a standalone Python command-line interface. It must run inside Mechanical.
-
----
-
-## Configuration
-
-All user-adjustable settings are located near the beginning of the script under `USER SETTINGS`. Change the values directly in the script before execution.
-
-### General matching settings
-
-| Setting | Default | Description |
-|---|---:|---|
-| `DRY_RUN` | `True` | When `True`, reports planned changes without modifying the model. Set to `False` to rename bodies and create contacts. |
-| `PILOT_SCREWS` | `None` | `None` processes all screws. A list such as `[1, 3]` restricts processing to those screw numbers. |
-| `PINBALL_ADD_MM` | `0.3` | Added to the detected circular edge radius to define the pinball radius. |
-| `END_TOL_MM` | `3.0` | Maximum node-to-edge-center distance for top and bottom matching. |
-| `MID_TOL_MM` | `2.0` | Maximum node-to-edge-center distance for middle-node matching. |
-| `MAX_EDGES_MID` | `2` | Maximum number of hole edges assigned to each middle node, normally one per different body. |
-| `MID_LIMIT_OVERRIDE` | `{}` | Per-screw/per-middle-node override. Example: `{(1, "MID2"): 1}`. |
-| `MIN_RADIUS_MM` | `0.5` | Circular edges with a smaller radius are ignored. |
-| `LENGTH_FACTOR_TO_MM` | `None` | `None` attempts to infer the geometry unit from `GeoData.Unit`. Set explicitly if the API unit conversion is not correct. |
-
-### Existing contacts and reruns
-
-| Setting | Default | Description |
-|---|---:|---|
-| `GROUP_NAME` | `"screwContacts"` | Exact name of the connection group used by the script. |
-| `REBUILD_FROM_SCRATCH` | `False` | If `True`, deletes the entire named group, including its folders and contacts, before rebuilding. |
-| `CHECK_EXISTING_BY_SCOPE` | `True` | Recognizes existing contacts by name or matching geometry scope. If `False`, recognition is name-based only. |
-| `FAST_EXISTING_SCAN` | `True` | Accepts a contact whose name matches a planned name without reading its scope. This speeds up large existing groups. |
-| `DELETE_CONFLICTING_CONTACTS` | `False` | If enabled, deletes existing contacts that use a node belonging to this script but target an edge not selected by the current matching. Review the conflict report before enabling. |
-| `LIST_NEW_CONTACTS` | `True` | Lists the names of newly created contacts. |
-| `LIST_NEW_MAX` | `100` | Maximum number of new contact names printed. |
-
-**Rerun behavior:** With the default settings, the script keeps the existing connection group and its contacts, recognizes contacts that are already present, and creates only missing contacts. Existing contacts recognized by name or scope are not recreated.
-
-If the script cannot safely read existing contacts or their scopes, it may skip creation to avoid producing duplicates. The console report explains the reason. Do not disable scope checking unless name-only recognition is acceptable for your model.
-
-`REBUILD_FROM_SCRATCH = True` is destructive: it removes the whole configured group, including any folders or manually maintained contacts inside it.
-
-### Top node and top edge
-
-| Setting | Default | Description |
-|---|---:|---|
-| `TOP_END` | `"auto"` | `"auto"` detects the top end; `"first"` or `"last"` forces the corresponding end in the screw's axis ordering. |
-| `TOP_END_OVERRIDE` | `{}` | Per-screw top-end override. Example: `{7: "last"}`. |
-| `TOP_COLLISION_RULE` | `"larger_edge"` | If both ends qualify as top candidates: `"larger_edge"`, `"first"`, or `"last"`. |
-| `TOP_RULE` | `"closest_above_hole"` | Selects the top extra concentric edge. `"largest"` selects the largest eligible edge. |
-| `TOP_RADIUS_OVERRIDE` | `{}` | Selects a top edge by radius for a particular screw. Example: `{7: 3.5}`. |
-| `TOP_EDGE_OVERRIDE` | `{}` | Selects a top edge by edge ID for a particular screw. Example: `{7: 5678}`. The ID may identify any segment of the selected edge. |
-| `TOP_MAX_RADIUS_MM` | `60.0` | Larger top circular edges are ignored. |
-| `CONCENTRIC_TOL_MM` | `0.05` | Maximum center separation for edges to be treated as concentric. |
-| `RADIUS_STEP_MIN_MM` | `0.05` | Minimum amount by which a candidate top edge must exceed the hole-edge radius. |
-
-In automatic mode, the script checks both ends of each screw for larger concentric circular edges. If both ends qualify, it applies `TOP_COLLISION_RULE` and prints a warning so the selected end can be checked. Use `TOP_END_OVERRIDE` when the automatic decision is not appropriate.
-
-For the top edge, the script considers eligible larger concentric edges on the selected top end. `TOP_EDGE_OVERRIDE` takes precedence over `TOP_RADIUS_OVERRIDE`; if an override does not identify an eligible candidate, the script reports the issue and falls back to the configured selection rule.
-
-### Segmented circular holes
-
-| Setting | Default | Description |
-|---|---:|---|
-| `INCLUDE_SEGMENTED_HOLES` | `True` | Combines arc segments belonging to the same circle into one target. If `False`, only full single-edge circles are used. |
-| `CIRCLE_MATCH_TOL_MM` | `0.05` | Tolerance for matching fitted arc centers and radii. |
-| `MIN_ARCS_IN_CIRCLE` | `2` | Minimum number of arcs required to form a segmented circular edge. |
-| `MIN_CIRCLE_COVERAGE` | `0.0` | Minimum fraction of a full circle covered by the grouped arcs. `0.0` disables this coverage threshold; `0.5` requires at least 50%. |
-| `ARC_FIT_TOL_FRAC` | `0.02` | Points-method fit tolerance as a fraction of the fitted radius. |
-| `LIST_ARC_GROUPS_MAX` | `30` | Maximum number of accepted segmented arc groups listed in the report. |
-
-A segmented circular target is represented by the IDs of all arc edges grouped into that circle. The contact target scope therefore includes all segments in the group, not just one arc.
-
-Arc groups are formed within each solid body. The script checks fitted center, radius, and plane orientation. Groups that do not meet the configured minimum arc count or coverage are not accepted as segmented hole edges.
-
-### Screw numbering and naming
-
-| Setting | Default | Description |
-|---|---:|---|
-| `SCREW_ORDER` | `"tree"` | `"tree"` numbers screws in geometry-tree order; `"position"` numbers by the screw's position. |
-| `RENAME_SCREWS_IN_TREE` | `True` | Renames screw line bodies in the geometry tree using the generated screw names. |
-| `SCREW_PREFIX` | `"Screw-"` | Prefix used for screw names. |
-| `SCREW_SEGMENT_SUFFIX` | `False` | If `True`, multiple line bodies belonging to one screw receive suffixes such as `-Seg1`. |
-| `NAME_SEPARATOR` | `" - "` | Separator between screw and edge portions of contact names. |
-| `INCLUDE_TREE_NAME_IN_CONTACT` | `False` | Optionally adds a tag based on the original geometry-tree name to contact names. This is automatically disabled when `RENAME_SCREWS_IN_TREE` is `True`. |
-| `EXTRACT_FROM_PARENTHESES` | `False` | When tree-name tagging is active, uses text inside parentheses as the tag. |
-
-Typical generated names:
-
-- Screw body: `Screw-0001`
-- Contact: `Screw-0001 - TopEdge-6016`
-
-The screw number is based on the selected `SCREW_ORDER`. With the default `"tree"` setting, the numbering follows geometry-tree order.
-
-### Performance and reporting
-
-| Setting | Default | Description |
-|---|---:|---|
-| `PREFILTER_EDGES` | `True` | Drops circular edges whose centers are not near any screw node before more detailed processing. |
-| `PREFILTER_MARGIN_MM` | `0.5` | Extra distance used by the edge prefilter. |
-| `ARC_METHOD` | `"closed_form"` | `"closed_form"` uses the fast chord/arc-length/centroid calculation; `"points"` uses edge points. |
-| `ARC_CROSSCHECK_N` | `3` | Number of initial arcs cross-checked against the points method. A detected mismatch switches the calculation to the points method. |
-| `FAST_PROPERTY_ORDER` | `True` | Assigns scopes last to reduce Mechanical tree updates. |
-| `USE_TRANSACTION` | `True` | Uses Mechanical transactions if the current environment exposes the `Transaction` API. |
-| `TX_BATCH_SCREWS` | `20` | Number of screws processed per transaction batch. |
-| `SHOW_TIMING` | `True` | Shows elapsed time and estimated remaining time in progress output. |
-| `SHOW_PHASE_TIMES` | `True` | Prints elapsed time for each processing phase in the final report. |
-| `VERBOSE_MATCHES` | `False` | Prints every individual node-to-edge match. |
-| `PROGRESS_EVERY` | `25` | Prints creation progress every configured number of screws. |
-
----
-
-## How matching works
-
-### 1. Read and classify geometry
-
-The script reads geometry assemblies and parts, classifies wire bodies as screw candidates, and treats the remaining bodies as solid candidates. It reads wire-body vertices and the circular edges of the solid bodies.
-
-### 2. Identify circular edges
-
-Full circles are identified from their edge length and centroid. Their radius is calculated as:
-
-`radius = edge length / (2 × π)`
-
-For arc edges, the script determines the circle center, radius, and plane using either the closed-form method or the points-based method. The closed-form method is cross-checked against the points method for the first configured number of arcs; if a mismatch is found, the script switches to the points method.
-
-### 3. Combine segmented circles
-
-Arc segments from the same solid body are grouped when their fitted centers and radii agree within `CIRCLE_MATCH_TOL_MM` and their planes are parallel within the script's angular comparison. Accepted groups are treated as one circular target with all segment IDs retained.
-
-### 4. Group screw line bodies and order their nodes
-
-Line bodies sharing vertex positions are grouped into one screw. Coincident node positions are merged for matching while retaining the relevant vertex IDs and body references. The screw axis is estimated from the farthest pair of unique nodes, and nodes are ordered along that axis.
-
-### 5. Match top, middle, and bottom nodes
-
-- **Top:** The script searches for larger concentric edges at the screw ends and determines the top end using the configured rules and overrides.
-- **Middle:** For each middle node, the smallest circular edge in the nearest concentric-edge cluster on each nearby solid body is considered. The configured maximum number of edges is applied.
-- **Bottom:** The smallest circular edge in the nearest concentric-edge cluster on each nearby solid body is considered, with one edge assigned to the bottom node.
-
-The candidate pairs are sorted by distance, edge radius, and edge ID before assignment. The distance tolerances and edge-use tracking prevent candidates outside the configured range or already assigned elsewhere from being used.
-
-### 6. Check existing contacts and create missing ones
-
-The script searches for the configured connection group and scans its contacts, including nested folders. It compares planned contacts with existing contact names and, when enabled, source/target geometry scopes. It then creates only the contacts that are not already present.
-
-Contacts are created with Bonded contact type, MPC formulation, radius-based pinball, and the detected pinball radius. If creation of a contact fails after a partial object has been made, the script attempts to delete that partial object.
-
----
-
-## Console report and troubleshooting
-
-The console output is intended to be reviewed before and after creation.
-
-| Report item | What to check |
-|---|---|
-| Wire bodies / solid bodies | Confirm that the expected geometry was classified. |
-| Screws found and screw numbering | Confirm the number and order of screws. |
-| Circular edges near screw nodes | Check that expected hole edges were detected. |
-| Segmented arc groups | Confirm that split hole edges were combined as expected. |
-| Rejected arc groups / unfit arcs | Review if a required hole was not accepted. |
-| Top node / top edge checks | Review warnings where both ends qualify or no top candidate is found. |
-| Matches and contacts per screw | Confirm the expected top, middle, and bottom assignments. |
-| Existing contacts / to create | Confirm that reruns will not duplicate contacts. |
-| Conflicting contacts | Review carefully before enabling automatic deletion. |
-| Nodes without edge | These nodes need attention; the script may provide a nearby single-arc hint. |
-| Failed contacts / property warnings | Inspect the reported contact name and API/property message. |
-| Time per phase | Use to identify which processing stage takes the most time. |
-
-### Common checks
-
-**No screws detected**
-- Confirm that screw geometry is represented by wire/line bodies.
-- Confirm that the line bodies contain the expected vertices.
-- Check that connected segments share coincident vertex positions.
-
-**Hole edges are not detected**
-- Confirm that the hole boundaries are circular edges on solid bodies.
-- Check the model length units and the reported sample radius.
-- Review `MIN_RADIUS_MM`, `END_TOL_MM`, `MID_TOL_MM`, and `PREFILTER_EDGES`.
-- For segmented holes, review `INCLUDE_SEGMENTED_HOLES`, `MIN_ARCS_IN_CIRCLE`, and the arc-group report.
-
-**A segmented hole is rejected or not grouped**
-- Review the reported arc IDs and rejection reason.
-- Check `CIRCLE_MATCH_TOL_MM` and `MIN_CIRCLE_COVERAGE`.
-- If the closed-form arc calculation appears unsuitable for the geometry, set `ARC_METHOD = "points"` and compare the result.
-
-**The wrong end is identified as the top**
-- Review the warning in the top-node checks.
-- Set `TOP_END_OVERRIDE` for the affected screw.
-- If both ends qualify, review `TOP_COLLISION_RULE`.
-
-**A contact is missing or duplicated**
-- Check the existing-contact scan report.
-- Confirm `GROUP_NAME` matches the intended connection group exactly.
-- Keep `CHECK_EXISTING_BY_SCOPE = True` unless name-only matching is deliberately required.
-- If the script reports that it cannot safely inspect existing contacts, resolve that issue before rerunning rather than forcing creation.
-
-**The script is slow**
-- Keep `PREFILTER_EDGES = True` and `ARC_METHOD = "closed_form"` unless troubleshooting indicates otherwise.
-- Keep `FAST_EXISTING_SCAN = True` for large existing contact groups.
-- Review the phase timing summary to identify the expensive stage.
-
----
-
-## Important safety notes
-
-- `DRY_RUN = True` is the default and should be used for the first run on every model.
-- `DRY_RUN = False` permits model changes, including screw-body renaming when `RENAME_SCREWS_IN_TREE = True`, and contact creation.
-- `REBUILD_FROM_SCRATCH = True` deletes the entire configured connection group, including folders and contacts.
-- `DELETE_CONFLICTING_CONTACTS = True` can delete existing contacts. Review the conflict list and save a project copy before enabling it.
-- The script's automatic geometric matching is based on tolerances and geometric heuristics. Always inspect the resulting scopes and contact regions.
-- A successful script run does not establish that the resulting model is physically appropriate or that the analysis will converge.
-- Save a backup copy of the project before running in creation mode, especially when using rebuild or conflict-deletion options.
-
----
-
-## Repository contents
-
-A simple repository layout could be:
-
-```text
-.
-├── README.md
-└── screwContactCreatorScript - v1.3.py
-```
-
----
-
-## Version history
-
-### v1.3
-- Added a fast closed-form arc geometry calculation based on chord length, arc length, and centroid.
-- Cross-checks the first configured number of arcs against the points-based calculation and switches to the points method if a mismatch is detected.
-- Added spatial prefiltering to discard circular edges far from all screw nodes.
-- Optimized existing-contact scanning; planned contact names can be accepted without reading scopes when `FAST_EXISTING_SCAN` is enabled.
-- Added phase-by-phase execution timing and progress timing.
-- Improved connection-group name matching by normalizing case, spaces, underscores, and hyphens.
-- Changed defaults to `DRY_RUN = True` and `REBUILD_FROM_SCRATCH = False` for safer execution.
-
-### v1.2
-- Reworked segmented circular-hole detection to group arcs by fitted circle center, radius, and plane orientation.
-- Added circle-fit validation, minimum arc-count and circle-coverage checks, and improved arc-group reporting.
-
-### v1.1
-- Added rerun support and recognition of existing contacts by name and/or geometry scope.
-- Added detection of conflicting contacts.
-- Improved top-edge detection using concentric circular-edge groups and added top-edge overrides.
-- Improved middle/bottom matching and console diagnostics.
-
-### v1.0
-- Initial automatic screw-node-to-hole-edge bonded MPC contact generation.
-- Supported circular hole edges and the initial segmented-edge handling.
-
----
-
-## License
-
-No license is specified in this repository. Unless a license is added, standard copyright restrictions apply and reuse, modification, and redistribution are not automatically granted.
-
-## Disclaimer
-
-This script is provided as an engineering automation aid. It is not an official ANSYS product and is not affiliated with or endorsed by ANSYS, Inc. Use it at your own risk. The user is responsible for validating geometry selections, contact definitions, model behavior, and simulation results.
-'''
-
-output_path = "/mnt/data/README.md"
-pypandoc.convert_text(readme, "md", format="md", outputfile=output_path, extra_args=["--standalone"])
-print(f"Created {output_path}")
+Why this script exists
+A model with hundreds of bolted joints needs at least four node-to-edge contacts per screw. Creating them by hand takes a very long time and is error-prone. The script finds the right edge for every screw node, sets the contact properties, and reports every node it could not handle so you can finish those by hand.
+Features
+Detects screws automatically: line bodies that share end points form one screw, and the nodes are ordered along the screw axis.
+Matches every node to its hole edge using a spatial grid, so large models stay fast.
+Supports full circular edges and hole edges split into several arcs (typical for STEP files). All arcs of a split edge become the contact target.
+Handles spacers: a middle or bottom node always uses the smallest concentric edge (the inner edge), regardless of the edge order in the geometry.
+Finds the top node by definition: an end node that has, around the hole edge, an extra concentric and larger edge.
+Creates only missing contacts on re-runs. An existing contact group, manual folders and contacts are never deleted.
+Renames the screws in the geometry tree (`Screw-0001`, `Screw-0002`, ...) in geometry-tree order.
+Prints a report with a list of nodes that need manual contacts.
+Includes a dry-run mode that changes nothing.
+Model assumptions
+Each screw is a chain of line bodies. Every section end is a geometry vertex (and therefore also a mesh node).
+Each screw sits in a hole made of two or three stacked solid bodies. The hole diameter may differ between bodies.
+Top node: an end node at the center of the hole edge, with an additional larger edge concentric to it on the outer face (perpendicular to the screw axis).
+Middle nodes: at the interface of two bodies, at the center of two circular edges (one per body).
+Bottom node: at the center of the hole edge of the last body.
+Hole edges are full circles or are split into several arcs.
+Contact definition
+Property	Value
+Type	Bonded
+Scope Mode	Manual
+Contact side	Beam node (geometry vertex)
+Target side	Circular edge (all arcs of a split edge)
+Formulation	MPC
+Constraint Type	Distributed, Anywhere Inside Pinball
+Trim Contact	Program Controlled
+Suppressed	No
+Pinball Region	Radius
+Pinball Radius	Edge radius + 0.3 mm
+> \*\*Ansys 2019 R2 bug:\*\* if the edge is selected before the node, the pinball center ends up on the edge and Contact Tool reports an open contact. The script always scopes the \*\*node first and the edge(s) second\*\*, and it can read the scope back after creation to confirm this (`VERIFY\_SCOPE\_AFTER\_CREATE`). Please still check a few contacts with Contact Tool.
+Naming
+Object	Name
+Screw (geometry tree)	`Screw-0001`, `Screw-0002`, ...
+Contact	`Screw-0003 - TopEdge-6016`
+Contact roles	`TopEdge`, `Mid1Edge`, `Mid2Edge`, ..., `BottomEdge`
+Edge number	Edge id (lowest id for edges made of several arcs)
+Screws are numbered in geometry-tree order, top to bottom. The numbers change if the order in the tree changes.
+Requirements
+Ansys Mechanical 2019 R2 with the ACT Console.
+A model with line-body screws and solid bodies with circular hole edges.
+The Connection group (default name `screwContacts`) is created by the script if it does not exist. Folders inside it cannot be created through the 2019 R2 API; group them manually if you want them.
+How to run (Ansys 2019 R2)
+Back up the project.
+In Mechanical, turn on the ACT button in the toolbar to open the ACT Console.
+Create a new snippet.
+Paste the complete content of `screw\_contacts.py` into the snippet.
+Click the snippet. This pastes the code into the command line.
+Press Enter to run it.
+Recommended order:
+Run with `DRY\_RUN = True` and read the report.
+Fix settings if needed, repeat the dry run.
+Set `DRY\_RUN = False` and run for real. Optionally test on a few screws first with `PILOT\_SCREWS = \[1, 3]`.
+Create the nodes listed under "Nodes WITHOUT edge" by hand.
+Check a few contacts with Contact Tool.
+Settings
+All settings are at the top of the script.
+General
+Setting	Default	Meaning
+`DRY\_RUN`	`True`	`True`: plan and report only, change nothing. `False`: rename and create.
+`PILOT\_SCREWS`	`None`	List of screw numbers to process, e.g. `\[1, 3]`. `None` = all screws.
+`PINBALL\_ADD\_MM`	`0.3`	Added to the edge radius for the pinball radius.
+`END\_TOL\_MM`	`3.0`	Maximum distance between a top or bottom node and the edge center.
+`MID\_TOL\_MM`	`2.0`	Same for middle nodes. Keep it below half the screw spacing.
+`MAX\_EDGES\_MID`	`2`	Edges per middle node (one per body).
+`MID\_LIMIT\_OVERRIDE`	`{}`	Per node limit, e.g. `{(1, "MID2"): 1}`.
+`MIN\_RADIUS\_MM`	`0.5`	Ignore circles smaller than this.
+`LENGTH\_FACTOR\_TO\_MM`	`None`	Automatic from the model unit. Set `1000.0` if the printed radius is wrong.
+Existing contacts and re-runs
+Setting	Default	Meaning
+`GROUP\_NAME`	`"screwContacts"`	Name of the connection group. The name matching ignores case, spaces, `\_` and `-`.
+`REBUILD\_FROM\_SCRATCH`	`False`	`True` deletes the whole group, including folders and contacts.
+`CHECK\_EXISTING\_BY\_SCOPE`	`True`	Recognise existing contacts by name or by scope. `False` = by name only.
+`FAST\_EXISTING\_SCAN`	`True`	Skip scope reading for contacts whose name matches a planned name.
+`DELETE\_CONFLICTING\_CONTACTS`	`False`	Delete contacts that use a node of the script with a different edge. Review the list first.
+`VERIFY\_SCOPE\_AFTER\_CREATE`	`True`	Read back Source (node) and Target (edge) of each new contact and report mismatches.
+Top node and top edge
+Setting	Default	Meaning
+`TOP\_END`	`"auto"`	`"auto"`, `"first"` or `"last"` along the screw axis.
+`TOP\_END\_OVERRIDE`	`{}`	Per screw, e.g. `{7: "last"}`.
+`TOP\_COLLISION\_RULE`	`"larger\_edge"`	If both ends qualify: `"larger\_edge"`, `"first"` or `"last"`.
+`TOP\_RULE`	`"closest\_above\_hole"`	Smallest edge larger than the hole, or `"largest"`.
+`TOP\_RADIUS\_OVERRIDE`	`{}`	Per screw, e.g. `{7: 3.5}`.
+`TOP\_EDGE\_OVERRIDE`	`{}`	Per screw, e.g. `{7: 5678}`. Any segment id of the edge works.
+`TOP\_MAX\_RADIUS\_MM`	`60.0`	Ignore larger circles at the top node.
+`CONCENTRIC\_TOL\_MM`	`0.05`	Edges with centers closer than this are concentric.
+`RADIUS\_STEP\_MIN\_MM`	`0.05`	The extra edge must be at least this much larger than the hole edge.
+Edges made of several arcs
+Setting	Default	Meaning
+`INCLUDE\_SEGMENTED\_HOLES`	`True`	Combine arcs on the same circle into one hole edge.
+`CIRCLE\_MATCH\_TOL\_MM`	`0.05`	Arcs belong together if center and radius agree within this and the planes are parallel.
+`MIN\_ARCS\_IN\_CIRCLE`	`2`	A circle needs at least this many arcs. A single arc (for example a slot end) is not used.
+`MIN\_CIRCLE\_COVERAGE`	`0.0`	Minimum fraction of the full circle covered by the arcs (0 = off).
+`ARC\_METHOD`	`"closed\_form"`	`"closed\_form"` or `"points"`. See the notes below.
+`ARC\_CROSSCHECK\_N`	`3`	Number of arcs cross-checked between both methods.
+Naming
+Setting	Default	Meaning
+`SCREW\_ORDER`	`"tree"`	`"tree"` = geometry-tree order, `"position"` = by coordinates.
+`RENAME\_SCREWS\_IN\_TREE`	`True`	Rename the screw line bodies in the tree.
+`SCREW\_PREFIX`	`"Screw-"`	Prefix of the screw name.
+`SCREW\_SEGMENT\_SUFFIX`	`False`	Add `-Seg1`, `-Seg2`, ... if a screw has several bodies.
+`NAME\_SEPARATOR`	`" - "`	Separator inside contact names.
+`INCLUDE\_TREE\_NAME\_IN\_CONTACT`	`False`	Old style tag from the original tree name. Switched off automatically when renaming is on.
+`EXTRACT\_FROM\_PARENTHESES`	`False`	Only used with the tag: keep only the text inside `( )`.
+Speed
+Setting	Default	Meaning
+`PREFILTER\_EDGES`	`True`	Drop edges that are far from every screw node early.
+`FAST\_PROPERTY\_ORDER`	`True`	Properties first, scope last (fewer tree updates). `False`: scope first. Both select the node first.
+`USE\_TRANSACTION`	`True`	Use Mechanical's `Transaction` if it exists in this version.
+`TX\_BATCH\_SCREWS`	`20`	Screws per transaction batch.
+`SHOW\_PHASE\_TIMES`	`True`	Print the time of every phase in the summary.
+How it works
+Read geometry. Line bodies, their vertices and the circular edges of the solid bodies are read once from `GeoData` and converted to millimetres.
+Build the screws. Line bodies sharing end positions are merged into one screw. Its nodes are ordered along the axis (farthest pair of nodes).
+Circular edges. Full circles use the edge centroid as center and `length / 2π` as radius. Arcs have no radius or center property in 2019 R2, so they are computed: the arc angle follows from the chord, the arc length and the arc centroid, and a circle fit through the start vertex, a middle point and the end vertex is used as a cross-check. Arcs of the same body with the same center, radius and plane form one hole edge.
+Spatial grid. Edges are stored in 3D grid cells so each node only checks its own cell and its neighbours.
+Match. For each node and body the nearest cluster of concentric edges is taken, and the smallest circle is the hole edge. The top node is the end that has a larger concentric edge as well. Every edge is used only once.
+Contacts. Missing contacts are created screw by screw (top, middle nodes, bottom), so one screw's contacts are listed together. Node first, then edge(s).
+The report
+Section	What it tells you
+Header	Mode (dry run or create), unit, counts of bodies and edges
+Hole edges made of several arcs	Arc ids, covered fraction of the circle, radius, center
+`\[rejected]`	Arc groups that were not used and why
+Top node checks	Candidates for the top edge and warnings if both ends qualify
+Screw numbering	New name next to the original tree name
+Contacts per screw	Number of contacts per role
+Existing contacts	How many were found and recognised, `\[?]` for contacts that conflict with the plan
+Summary	Created and failed contacts, scope check, timing
+`Nodes WITHOUT edge`	Nodes you must connect manually, with a reason
+Limitations
+Hole edges must be full circles or arcs of one circle. Slots, pill shapes and single half circles are not supported and are listed as missing.
+Folders inside the contact group cannot be created through the 2019 R2 API. New contacts are added at the end of the group; move them into your manual folders if needed.
+Screw numbers follow the geometry tree order. If the order changes, numbers and names change on the next run.
+Renaming, tree order, `Transaction` and some property names depend on the API of the installed version. Failures are printed and do not stop the run.
+The script was developed and tested on a sample model with 20 screws. Test on a few screws (`PILOT\_SCREWS`) before running on a new model type.
+Troubleshooting
+Problem	Likely cause and fix
+Nothing is renamed or created	`DRY\_RUN` is `True`. Set it to `False`.
+A second contact group appears	`GROUP\_NAME` does not match the name of your existing group. The report lists the objects under Connections.
+`Creation skipped` message	The existing group could not be read safely. Nothing is created to avoid duplicates.
+Radius is 1000 times off	Set `LENGTH\_FACTOR\_TO\_MM`.
+Node listed under `NO EDGE`	The edge is not circular, is a single arc, or lies outside the tolerance. Create the contact by hand or increase the tolerance.
+Wrong top edge	Use `TOP\_END\_OVERRIDE`, `TOP\_RADIUS\_OVERRIDE` or `TOP\_EDGE\_OVERRIDE` for that screw.
+Open contact in Contact Tool	Check `Scope check` in the summary. The node must be the contact side and must be selected first.
+Message about switching to the Points method	The closed form for arcs did not match the Points method. The script uses Points automatically.
+Repository files
+File	Purpose
+`screw\_contacts.py`	The script
+`README.md`	This file
+Version history
+Version	Change
+1.4	Node is always scoped first, then the edge(s). Scope read-back check after creation.
+1.3	Closed-form arc geometry, edge prefilter, faster existing-contact scan, phase timing.
+1.2	True radius and center for arcs, grouping of arcs on one circle, minimum arcs per circle.
+1.1	Re-runs create only missing contacts. Spacer fix (inner edge). Top node by definition.
+1.0	First release: node-to-edge contacts, tree renaming, per-screw order, report.
+License
+This project is licensed under the MIT License.
+Disclaimer
+Check the results before using them in a simulation. Always keep a backup of the project and verify a sample of the generated contacts.
